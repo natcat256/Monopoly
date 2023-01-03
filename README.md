@@ -30,7 +30,7 @@ namespace TheNamespace
     }
 }
 ```
-This method will be invoked upon injection. The ``@namespace``, ``@class``, and ``method`` parameters provided to the ``Inject`` method should pertain to the method defined in the assembly.
+The ``@namespace``, ``@class``, and ``method`` parameters provided to the ``Inject`` method should pertain to the method defined in the assembly. This method will be invoked upon injection.
 
 ## Examples
 Examples can be found in the ``Monopoly.Test.Loader`` and ``Monopoly.Test.ModAssembly`` projects.
