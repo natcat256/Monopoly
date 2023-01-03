@@ -4,6 +4,8 @@ using namespace System;
 
 namespace Monopoly
 {
+	class RemoteAssembler;
+
 	private ref class RemoteMonoWrapper
 	{
 	private:
@@ -17,6 +19,9 @@ namespace Monopoly
 		DWORD_PTR m_classFromName;
 		DWORD_PTR m_classGetMethodFromName;
 		DWORD_PTR m_runtimeInvoke;
+
+		void AssembleTrampolinePrologue(RemoteAssembler& assembler);
+		void AssembleTrampolineEpilogue(RemoteAssembler& assembler);
 
 	public:
 		RemoteMonoWrapper(HANDLE processHandle, HMODULE monoModule);

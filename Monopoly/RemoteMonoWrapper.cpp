@@ -24,20 +24,24 @@ RemoteMonoWrapper::RemoteMonoWrapper(HANDLE processHandle, HMODULE monoModule)
     m_runtimeInvoke = MemoryTools::TryFindFunctionExportAddress(processHandle, moduleBaseAddress, exportDirectory, "mono_runtime_invoke");
 }
 
-#define TRAMPOLINE_ASM_PROLOGUE() \
-    assembler.SubRspImmediate32(40);               /* sub rsp, 40                          ; align the stack             */ \
-    assembler.MovRaxImmediate64(m_getRootDomain);  /* mov rax, mono_get_root_domain        ; get the MonoDomain*         */ \
-    assembler.CallRaxNear();                       /* call rax                                                           */ \
-    assembler.MovRcxRax();                         /* mov rcx, rax                         ; pass the MonoDomain* as arg */ \
-    assembler.MovRaxImmediate64(m_threadAttach);   /* mov rax, mono_thread_attach          ; attach the thread           */ \
-    assembler.CallRaxNear();                       /* call rax                                                           */
-
-#define TRAMPOLINE_ASM_EPILOGUE() \
-    assembler.MovRaxImmediate64(EXIT_SUCCESS);     /* mov rax, EXIT_SUCCESS                ; set the thread exit code    */ \
-    assembler.AddRspImmediate32(40);               /* add rsp, 40                          ; align the stack             */ \
-    assembler.RetNear();                           /* ret                                                                */
-
 constexpr SIZE_T TRAMPOLINE_SIZE = 128;
+
+void RemoteMonoWrapper::AssembleTrampolinePrologue(RemoteAssembler& assembler)
+{
+    assembler.SubRspImmediate32(40);                // sub rsp, 40                      ; align the stack
+    assembler.MovRaxImmediate64(m_getRootDomain);   // mov rax, mono_get_root_domain    ; get the MonoDomain*
+    assembler.CallRaxNear();                        // call rax
+    assembler.MovRcxRax();                          // mov rcx, rax                     ; pass the MonoDomain* as arg
+    assembler.MovRaxImmediate64(m_threadAttach);    // mov rax, mono_thread_attach      ; attach the thread
+    assembler.CallRaxNear();                        // call rax
+}
+
+void RemoteMonoWrapper::AssembleTrampolineEpilogue(RemoteAssembler& assembler)
+{
+    assembler.MovRaxImmediate64(EXIT_SUCCESS);  // mov rax, EXIT_SUCCESS    ; set the thread exit code
+    assembler.AddRspImmediate32(40);            // add rsp, 40              ; align the stack
+    assembler.RetNear();                        // ret
+}
 
 DWORD_PTR RemoteMonoWrapper::TryOpenImageFromData(array<byte>^ data)
 {
@@ -54,7 +58,7 @@ DWORD_PTR RemoteMonoWrapper::TryOpenImageFromData(array<byte>^ data)
     const DWORD_PTR returnValueAddress = MemoryTools::TryAllocateMemory(m_processHandle, sizeof(DWORD_PTR), PAGE_READWRITE);
 
     RemoteAssembler assembler(m_processHandle, trampolineAddress);
-    TRAMPOLINE_ASM_PROLOGUE();
+    AssembleTrampolinePrologue(assembler);
     assembler.MovRcxImmediate64(dataAddress);          // mov rcx, dataAddress                 ; provide char* data
     assembler.MovRdxImmediate64(data->Length);         // mov rdx, dataLength                  ; provide guint32 data_len
     assembler.MovR8Immediate64(0);                     // mov r8, 0                            ; provide gboolean need_copy
@@ -62,7 +66,7 @@ DWORD_PTR RemoteMonoWrapper::TryOpenImageFromData(array<byte>^ data)
     assembler.MovRaxImmediate64(m_imageOpenFromData);  // mov rax, mono_image_open_from_data   ; call the function
     assembler.CallRaxNear();                           // call rax
     assembler.MovOffsetRax(returnValueAddress);        // mov [returnValueAddress], rax        ; store the MonoImage* where we can grab it
-    TRAMPOLINE_ASM_EPILOGUE();
+    AssembleTrampolineEpilogue(assembler);
 
     MemoryTools::TryExecuteInNewThread(m_processHandle, trampolineAddress);
 
@@ -93,14 +97,14 @@ DWORD_PTR RemoteMonoWrapper::TryLoadAssemblyFromImage(DWORD_PTR monoImage)
     const DWORD_PTR returnValueAddress = MemoryTools::TryAllocateMemory(m_processHandle, sizeof(DWORD_PTR), PAGE_READWRITE);
 
     RemoteAssembler assembler(m_processHandle, trampolineAddress);
-    TRAMPOLINE_ASM_PROLOGUE();
+    AssembleTrampolinePrologue(assembler);
     assembler.MovRcxImmediate64(monoImage);            // mov rcx, monoImage                ; provide MonoImage* image
     assembler.MovRdxImmediate64(nameAddress);          // mov rdx, nameAddress              ; provide const char* fname
     assembler.MovR8Immediate64(statusAddress);         // mov r8, statusAddress             ; provide MonoImageOpenStatus* status
     assembler.MovRaxImmediate64(m_assemblyLoadFrom);   // mov rax, mono_assembly_load_from  ; call the function
     assembler.CallRaxNear();                           // call rax
     assembler.MovOffsetRax(returnValueAddress);        // mov [returnValueAddress], rax     ; store the MonoAssembly* where we can grab it
-    TRAMPOLINE_ASM_EPILOGUE();
+    AssembleTrampolineEpilogue(assembler);
 
     MemoryTools::TryExecuteInNewThread(m_processHandle, trampolineAddress);
 
@@ -126,12 +130,12 @@ DWORD_PTR RemoteMonoWrapper::TryGetImageFromAssembly(DWORD_PTR monoAssembly)
     const DWORD_PTR returnValueAddress = MemoryTools::TryAllocateMemory(m_processHandle, sizeof(DWORD_PTR), PAGE_READWRITE);
 
     RemoteAssembler assembler(m_processHandle, trampolineAddress);
-    TRAMPOLINE_ASM_PROLOGUE();
+    AssembleTrampolinePrologue(assembler);
     assembler.MovRcxImmediate64(monoAssembly);         // mov rcx, monoImage                ; provide MonoAssembly* assembly
     assembler.MovRaxImmediate64(m_assemblyGetImage);   // mov rax, mono_assembly_get_image  ; call the function
     assembler.CallRaxNear();                           // call rax
     assembler.MovOffsetRax(returnValueAddress);        // mov [returnValueAddress], rax     ; store the MonoImage* where we can grab it
-    TRAMPOLINE_ASM_EPILOGUE();
+    AssembleTrampolineEpilogue(assembler);
 
     MemoryTools::TryExecuteInNewThread(m_processHandle, trampolineAddress);
 
@@ -162,14 +166,14 @@ DWORD_PTR RemoteMonoWrapper::TryGetClassFromName(DWORD_PTR monoImage, String^ __
     const DWORD_PTR returnValueAddress = MemoryTools::TryAllocateMemory(m_processHandle, sizeof(DWORD_PTR), PAGE_READWRITE);
 
     RemoteAssembler assembler(m_processHandle, trampolineAddress);
-    TRAMPOLINE_ASM_PROLOGUE();
+    AssembleTrampolinePrologue(assembler);
     assembler.MovRcxImmediate64(monoImage);            // mov rcx, monoImage               ; provide MonoImage* image
     assembler.MovRdxImmediate64(namespaceAddress);     // mov rdx, namespaceAddress        ; provide const char* name_space
     assembler.MovR8Immediate64(classAddress);          // mov r8, classAddress             ; provide const char* name
     assembler.MovRaxImmediate64(m_classFromName);      // mov rax, mono_class_from_name    ; call the function
     assembler.CallRaxNear();                           // call rax
     assembler.MovOffsetRax(returnValueAddress);        // mov [returnValueAddress], rax    ; store the MonoClass* where we can grab it
-    TRAMPOLINE_ASM_EPILOGUE();
+    AssembleTrampolineEpilogue(assembler);
 
     MemoryTools::TryExecuteInNewThread(m_processHandle, trampolineAddress);
 
@@ -198,14 +202,14 @@ DWORD_PTR RemoteMonoWrapper::TryGetNoParamClassMethodFromName(DWORD_PTR monoClas
     const DWORD_PTR returnValueAddress = MemoryTools::TryAllocateMemory(m_processHandle, sizeof(DWORD_PTR), PAGE_READWRITE);
 
     RemoteAssembler assembler(m_processHandle, trampolineAddress);
-    TRAMPOLINE_ASM_PROLOGUE();
+    AssembleTrampolinePrologue(assembler);
     assembler.MovRcxImmediate64(monoClass);                // mov rcx, monoClass                       ; provide MonoClass* klass
     assembler.MovRdxImmediate64(methodAddress);            // mov rdx, methodAddress                   ; provide const char* name
     assembler.MovR8Immediate64(0);                         // mov r8, 0                                ; provide int param_count
     assembler.MovRaxImmediate64(m_classGetMethodFromName); // mov rax, mono_class_get_method_from_name ; call the function
     assembler.CallRaxNear();                               // call rax
     assembler.MovOffsetRax(returnValueAddress);            // mov [returnValueAddress], rax            ; store the MonoMethod* where we can grab it
-    TRAMPOLINE_ASM_EPILOGUE();
+    AssembleTrampolineEpilogue(assembler);
 
     MemoryTools::TryExecuteInNewThread(m_processHandle, trampolineAddress);
 
@@ -226,14 +230,14 @@ void RemoteMonoWrapper::TryInvokeNoParamStaticMethod(DWORD_PTR monoMethod)
     const DWORD_PTR trampolineAddress = MemoryTools::TryAllocateMemory(m_processHandle, TRAMPOLINE_SIZE, PAGE_EXECUTE_READWRITE);
 
     RemoteAssembler assembler(m_processHandle, trampolineAddress);
-    TRAMPOLINE_ASM_PROLOGUE();
+    AssembleTrampolinePrologue(assembler);
     assembler.MovRcxImmediate64(monoMethod);       // mov rcx, monoMethod          ; provide MonoMethod* method
     assembler.MovRdxImmediate64(0);                // mov rdx, 0                   ; provide void* obj
     assembler.MovR8Immediate64(0);                 // mov r8, 0                    ; provide void** params
     assembler.MovR9Immediate64(0);                 // mov r9, 0                    ; provide MonoObject** exc
     assembler.MovRaxImmediate64(m_runtimeInvoke);  // mov rax, mono_runtime_invoke ; call the function
     assembler.CallRaxNear();                       // call rax
-    TRAMPOLINE_ASM_EPILOGUE();
+    AssembleTrampolineEpilogue(assembler);
 
     MemoryTools::TryExecuteInNewThread(m_processHandle, trampolineAddress);
 
