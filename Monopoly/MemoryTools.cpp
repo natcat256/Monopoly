@@ -45,7 +45,7 @@ HMODULE MemoryTools::TryGetMonoModule(HANDLE processHandle)
 
     modules.resize(sizeNeeded);
 
-    if (!EnumProcessModules(processHandle, modules.data(), sizeNeeded, &sizeNeeded))
+    if (!EnumProcessModules(processHandle, &modules[0], sizeNeeded, &sizeNeeded))
         throw gcnew MonopolyException("EnumProcessModules failed");
 
     std::string filename;
@@ -53,7 +53,7 @@ HMODULE MemoryTools::TryGetMonoModule(HANDLE processHandle)
 
     for (HMODULE& module : modules)
     {
-        if (!GetModuleFileNameEx(processHandle, module, const_cast<LPSTR>(filename.data()), static_cast<DWORD>(filename.size())))
+        if (!GetModuleFileNameEx(processHandle, module, &filename[0], static_cast<DWORD>(filename.size())))
             throw gcnew MonopolyException("GetModuleFileNameEx failed");
 
         if (filename.rfind("mono") != std::string::npos)
@@ -98,7 +98,7 @@ DWORD_PTR MemoryTools::TryFindFunctionExportAddress(HANDLE processHandle, const 
 
         std::string exportName;
         exportName.resize(strlen(name));
-        TryReadMemory(processHandle, moduleBaseAddress + nameRva, const_cast<LPVOID>(reinterpret_cast<LPCVOID>(exportName.data())), strlen(name) + 1);
+        TryReadMemory(processHandle, moduleBaseAddress + nameRva, &exportName[0], strlen(name) + 1);
 
         if (exportName == name)
         {
