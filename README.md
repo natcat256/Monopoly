@@ -15,8 +15,8 @@ Any of these parameters should pertain to the target process to inject the assem
 
 The `Injector` class contains the method `Inject`, with two overloads:
 ```cs
-Inject(byte[] assemblyBytes, string @namespace, string @class, method);
-Inject(string assemblyPath, string @namespace, string @class, method);
+Inject(byte[] assemblyBytes, string @namespace, string @class, string method);
+Inject(string assemblyPath, string @namespace, string @class, string method);
 ```
 With `assemblyPath` being the path of the assembly to inject, or ``assemblyBytes`` being a byte array with the assembly's file contents.
 
