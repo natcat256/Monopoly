@@ -10,7 +10,7 @@ using namespace Monopoly;
 
 DWORD_PTR MemoryTools::TryAllocateMemory(HANDLE processHandle, const SIZE_T size, const DWORD protectionFlags)
 {
-    const LPVOID allocated = VirtualAllocEx(processHandle, nullptr, size, MEM_COMMIT, protectionFlags);
+    LPCVOID allocated = VirtualAllocEx(processHandle, nullptr, size, MEM_COMMIT, protectionFlags);
     if (!allocated)
         throw gcnew MonopolyException("VirtualAllocEx failed");
 
@@ -53,7 +53,7 @@ HMODULE MemoryTools::TryGetMonoModule(HANDLE processHandle)
 
     for (HMODULE& module : modules)
     {
-        if (!GetModuleFileNameEx(processHandle, module, &filename[0], static_cast<DWORD>(filename.size())))
+        if (!GetModuleFileNameEx(processHandle, module, &filename[0], MAX_PATH))
             throw gcnew MonopolyException("GetModuleFileNameEx failed");
 
         if (filename.rfind("mono") != std::string::npos)
